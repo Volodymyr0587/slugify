@@ -72,17 +72,17 @@ printf '%s\n' "TEXT" | slugify [OPTIONS]
 
 ### Options
 
-| Option | Description |
-|---|---|
+| Option                   | Description                                     |
+| ------------------------ | ----------------------------------------------- |
 | `-s`, `--separator CHAR` | Word separator: `-`, `_`, or `.`. Default: `-`. |
-| `-u`, `--uppercase` | Convert the slug to uppercase. |
-| `-l`, `--lowercase` | Convert the slug to lowercase (default). |
-| `-n`, `--no-numbers` | Remove digits. |
-| `-w`, `--stop-words` | Remove common English stop words. |
-| `-m`, `--max-length N` | Maximum slug length. `0` means unlimited. |
-| `-i`, `--stdin` | Read input from stdin. |
-| `-h`, `--help` | Display help. |
-| `-v`, `--version` | Display version. |
+| `-u`, `--uppercase`      | Convert the slug to uppercase.                  |
+| `-l`, `--lowercase`      | Convert the slug to lowercase (default).        |
+| `-n`, `--no-numbers`     | Remove digits.                                  |
+| `-w`, `--stop-words`     | Remove common English stop words.               |
+| `-m`, `--max-length N`   | Maximum slug length. `0` means unlimited.       |
+| `-i`, `--stdin`          | Read input from stdin.                          |
+| `-h`, `--help`           | Display help.                                   |
+| `-v`, `--version`        | Display version.                                |
 
 ### Examples
 
@@ -121,6 +121,20 @@ Options may be placed before or after the text:
 slugify --stop-words --separator _ "The Best Bash Guide"
 slugify "The Best Bash Guide" --stop-words --separator _
 ```
+
+### Special Characters in Bash
+
+When passing strings containing special shell characters
+such as `$`, `!`, `*`, or `&`, use single quotes to
+preserve the original input.
+
+```bash
+slugify 'Hello World!$$$'
+slugify 'C++ & PHP: 100% fun!'
+```
+
+Double quotes allow Bash to expand variables and perform
+history expansion in interactive shells.
 
 ## Testing
 
