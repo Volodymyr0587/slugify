@@ -12,6 +12,8 @@ A lightweight Bash CLI utility that converts text into clean, URL-friendly slugs
 - Optional removal of digits and common English stop words.
 - Maximum output length without a trailing separator.
 - Input as an argument or through stdin/pipes.
+- Batch processing of text files, converting each non-empty line into a separate slug.
+- Optional output file support for saving generated slugs instead of printing them to stdout.
 - No third-party runtime dependencies beyond standard Ubuntu utilities (`bash`, `sed`, and preferably `iconv`).
 
 ## Requirements
@@ -67,22 +69,26 @@ slugify --version
 ```text
 slugify [OPTIONS] TEXT
 slugify [OPTIONS] --stdin
+slugify [OPTIONS] --file FILE
+slugify [OPTIONS] --file FILE --output FILE
 printf '%s\n' "TEXT" | slugify [OPTIONS]
 ```
 
 ### Options
 
-| Option                   | Description                                     |
-| ------------------------ | ----------------------------------------------- |
-| `-s`, `--separator CHAR` | Word separator: `-`, `_`, or `.`. Default: `-`. |
-| `-u`, `--uppercase`      | Convert the slug to uppercase.                  |
-| `-l`, `--lowercase`      | Convert the slug to lowercase (default).        |
-| `-n`, `--no-numbers`     | Remove digits.                                  |
-| `-w`, `--stop-words`     | Remove common English stop words.               |
-| `-m`, `--max-length N`   | Maximum slug length. `0` means unlimited.       |
-| `-i`, `--stdin`          | Read input from stdin.                          |
-| `-h`, `--help`           | Display help.                                   |
-| `-v`, `--version`        | Display version.                                |
+| Option                   | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `-s`, `--separator CHAR` | Word separator: `-`, `_`, or `.`. Default: `-`.                          |
+| `-u`, `--uppercase`      | Convert the slug to uppercase.                                           |
+| `-l`, `--lowercase`      | Convert the slug to lowercase (default).                                 |
+| `-n`, `--no-numbers`     | Remove digits.                                                           |
+| `-w`, `--stop-words`     | Remove common English stop words.                                        |
+| `-m`, `--max-length N`   | Maximum slug length. `0` means unlimited.                                |
+| `-i`, `--stdin`          | Read input from stdin.                                                   |
+| `-f`, `--file FILE`      | Read multiple lines from a file, generating one slug per non-empty line. |
+| `-o`, `--output FILE`    | Write generated slugs to a file instead of stdout.                       |
+| `-h`, `--help`           | Display help.                                                            |
+| `-v`, `--version`        | Display version.                                                         |
 
 ### Examples
 
@@ -121,6 +127,40 @@ Options may be placed before or after the text:
 slugify --stop-words --separator _ "The Best Bash Guide"
 slugify "The Best Bash Guide" --stop-words --separator _
 ```
+
+#### File Input
+
+Process multiple titles from a text file:
+
+```bash
+slugify --file photo-titles.txt
+```
+
+Save generated slugs to another file:
+
+```bash
+slugify --file photo-titles.txt --output photo-slugs.txt
+```
+
+Short options are also supported:
+
+```bash
+slugify -f photo-titles.txt -o photo-slugs.txt
+```
+
+Combine file input with other options:
+
+```bash
+slugify --file article-titles.txt \
+    --output article-slugs.txt \
+    --stop-words \
+    --no-numbers \
+    --separator _
+```
+
+Each non-empty line is processed independently. Empty lines are skipped, and the final line is processed even if the file does not end with a newline.
+
+The output file is created if it does not exist and overwritten if it already exists. The input and output files must be different.
 
 ### Special Characters in Bash
 
@@ -244,7 +284,9 @@ The suite covers:
 - **Length handling:** unlimited length, word-boundary truncation, and truncation of a first word longer than the limit.
 - **Normalization:** repeated punctuation and whitespace.
 - **Symbols:** expansion of `&`, `+`, and `%`.
-- **Input sources:** positional arguments, pipes, and explicit `--stdin`.
+- **Input sources:** positional arguments, pipes, explicit `--stdin`, and file input through `--file`.
+- **File processing:** multiple lines, empty lines, missing trailing newline, Ukrainian transliteration, and option combinations.
+- **Output handling:** stdout, output files, overwriting existing files, and combined input/output options.
 - **Option combinations:** multiple options in one invocation.
 - **Error handling:** invalid separator, missing option values, invalid maximum length, unknown options, and conflicting input modes.
 - **Syntax:** Bash parser validation.
@@ -257,6 +299,8 @@ Bats supports filtering tests by name:
 bats --filter "Ukrainian" tests/slugify.bats
 bats --filter "separator" tests/slugify.bats
 bats --filter "stdin" tests/slugify.bats
+bats --filter "file input" tests/slugify.bats
+bats --filter "output file" tests/slugify.bats
 ```
 
 This is useful while developing one feature. After a focused test passes, always run the complete suite.

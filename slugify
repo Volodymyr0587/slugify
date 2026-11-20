@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 #
 # slugify - Convert text into a URL-friendly slug.
-# Version: 1.0.0
+# Version: 1.1.0
 #
 set -o nounset
 export LC_ALL=C.UTF-8
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 SEPARATOR="-"
 CASE="lower"
 REMOVE_NUMBERS=false
 REMOVE_STOP_WORDS=false
 MAX_LENGTH=0
 USE_STDIN=false
+INPUT_FILE=""
+OUTPUT_FILE=""
+OUTPUT_FD=1
 
 usage() {
     cat <<'EOF'
@@ -21,6 +24,7 @@ slugify - Convert text into a URL-friendly slug.
 Usage:
   slugify [OPTIONS] TEXT
   slugify [OPTIONS] --stdin
+  slugify [OPTIONS] --file FILE
   printf '%s\n' "TEXT" | slugify [OPTIONS]
 
 Options:
@@ -31,6 +35,8 @@ Options:
   -w, --stop-words       Remove English stop words
   -m, --max-length N     Maximum output length; 0 means unlimited
   -i, --stdin            Read input from standard input
+  -f, --file FILE        Read multiple lines from a file
+  -o, --output FILE      Write output to a file
   -h, --help             Show this help
   -v, --version          Show version
 
@@ -40,6 +46,10 @@ Examples:
   slugify "The Best Laravel 12 Tutorial" --stop-words --no-numbers
   slugify "A long article title" --separator _ --max-length 18
   printf '%s\n' "Hello World" | slugify
+  slugify --stdin
+  slugify --file photo-titles.txt
+  slugify --file photo-titles.txt --output photo-slugs.txt
+  slugify -f photo-titles.txt -o photo-slugs.txt
 EOF
 }
 
@@ -58,7 +68,7 @@ transliterate() {
         'ф:f' 'х:kh' 'ц:ts' 'ч:ch' 'ш:sh' 'щ:shch' 'ь:'
         'ю:yu' 'я:ya'
         'А:A' 'Б:B' 'В:V' 'Г:H' 'Ґ:G' 'Д:D' 'Е:E' 'Є:Ye'
-        'Ж:Zh' 'З:Z' 'И:Y' 'І:I' 'Ї:Yi' 'Й:Y' 'К:K' 'Л:L'
+        'Ж:Zh' 'З:Z' 'И:Y' 'І:I' 'Ї:YI' 'Й:Y' 'К:K' 'Л:L'
         'М:M' 'Н:N' 'О:O' 'П:P' 'Р:R' 'С:S' 'Т:T' 'У:U'
         'Ф:F' 'Х:Kh' 'Ц:Ts' 'Ч:Ch' 'Ш:Sh' 'Щ:Shch' 'Ь:'
         'Ю:Yu' 'Я:Ya'
@@ -90,8 +100,6 @@ transliterate() {
         text="$(printf '%s' "$text" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null)" ||
             die "input is not valid UTF-8 or could not be transliterated"
     else
-        # Keep ASCII characters if iconv is unavailable; unsupported characters
-        # are removed by the normalization step below.
         text="$(printf '%s' "$text" | LC_ALL=C sed 's/[^ -~]/ /g')"
     fi
 
@@ -150,6 +158,7 @@ generate_slug() {
         [[ -n "$word" ]] || continue
 
         lookup_word="${word,,}"
+
         if [[ "$REMOVE_STOP_WORDS" == true && -n "${stop_map[$lookup_word]+present}" ]]; then
             continue
         fi
@@ -173,6 +182,31 @@ generate_slug() {
     printf '%s\n' "$slug"
 }
 
+process_file() {
+    local line
+
+    # Process each line independently.
+    # Also handles the final line without a trailing newline.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines.
+        [[ -n "$line" ]] || continue
+
+        generate_slug "$line" >&"$OUTPUT_FD"
+    done < "$INPUT_FILE"
+}
+
+setup_output() {
+    [[ -n "$OUTPUT_FILE" ]] || return 0
+
+    # Prevent overwriting the input file.
+    if [[ -n "$INPUT_FILE" && -e "$OUTPUT_FILE" && "$INPUT_FILE" -ef "$OUTPUT_FILE" ]]; then
+        die "input and output files must be different"
+    fi
+
+    exec {OUTPUT_FD}>"$OUTPUT_FILE" ||
+        die "cannot write to output file: $OUTPUT_FILE"
+}
+
 main() {
     local input_text=""
     local -a positional=()
@@ -182,52 +216,86 @@ main() {
             -s|--separator)
                 (($# >= 2)) || die "missing value for $1"
                 SEPARATOR="$2"
+
                 [[ "$SEPARATOR" == "-" || "$SEPARATOR" == "_" || "$SEPARATOR" == "." ]] ||
                     die "separator must be -, _ or ."
+
                 shift 2
                 ;;
+
             -u|--uppercase)
                 CASE="upper"
                 shift
                 ;;
+
             -l|--lowercase)
                 CASE="lower"
                 shift
                 ;;
+
             -n|--no-numbers)
                 REMOVE_NUMBERS=true
                 shift
                 ;;
+
             -w|--stop-words)
                 REMOVE_STOP_WORDS=true
                 shift
                 ;;
+
             -m|--max-length)
                 (($# >= 2)) || die "missing value for $1"
                 [[ "$2" =~ ^[0-9]+$ ]] || die "max length must be a non-negative integer"
+
                 MAX_LENGTH=$((10#$2))
                 shift 2
                 ;;
+
             -i|--stdin)
+                [[ "$USE_STDIN" == false ]] || die "--stdin specified more than once"
                 USE_STDIN=true
                 shift
                 ;;
+
+            -f|--file)
+                (($# >= 2)) || die "missing value for $1"
+                [[ -z "$INPUT_FILE" ]] || die "--file specified more than once"
+
+                INPUT_FILE="$2"
+                shift 2
+                ;;
+
+            -o|--output)
+                (($# >= 2)) || die "missing value for $1"
+                [[ -z "$OUTPUT_FILE" ]] || die "--output specified more than once"
+
+                OUTPUT_FILE="$2"
+                shift 2
+                ;;
+
             -h|--help)
                 usage
                 return 0
                 ;;
+
             -v|--version)
                 printf 'slugify %s\n' "$VERSION"
                 return 0
                 ;;
+
             --)
                 shift
-                while (($#)); do positional+=("$1"); shift; done
+                while (($#)); do
+                    positional+=("$1")
+                    shift
+                done
                 break
                 ;;
+
             -*)
                 die "unknown option: $1 (use --help for usage)"
                 ;;
+
             *)
                 positional+=("$1")
                 shift
@@ -235,18 +303,45 @@ main() {
         esac
     done
 
-    if [[ "$USE_STDIN" == true ]]; then
-        [[ ${#positional[@]} -eq 0 ]] || die "do not combine --stdin with positional text"
-        input_text="$(cat)"
-    elif [[ ${#positional[@]} -gt 0 ]]; then
-        input_text="${positional[*]}"
-    elif [[ ! -t 0 ]]; then
-        input_text="$(cat)"
-    else
+    # Validate input sources.
+    if [[ -n "$INPUT_FILE" ]]; then
+        [[ "$USE_STDIN" == false ]] ||
+            die "do not combine --file with --stdin"
+
+        [[ ${#positional[@]} -eq 0 ]] ||
+            die "do not combine --file with positional text"
+
+        [[ -f "$INPUT_FILE" ]] ||
+            die "input file does not exist or is not a regular file: $INPUT_FILE"
+
+        [[ -r "$INPUT_FILE" ]] ||
+            die "cannot read input file: $INPUT_FILE"
+
+    elif [[ "$USE_STDIN" == true ]]; then
+        [[ ${#positional[@]} -eq 0 ]] ||
+            die "do not combine --stdin with positional text"
+
+    elif [[ ${#positional[@]} -eq 0 && -t 0 ]]; then
         die "no input provided (use --help for usage)"
     fi
 
-    generate_slug "$input_text"
+    # Prepare output only after input validation.
+    setup_output
+
+    # File input: process every line separately.
+    if [[ -n "$INPUT_FILE" ]]; then
+        process_file
+        return 0
+    fi
+
+    # Standard input or positional text.
+    if [[ "$USE_STDIN" == true || ( ${#positional[@]} -eq 0 && ! -t 0 ) ]]; then
+        input_text="$(cat)"
+    else
+        input_text="${positional[*]}"
+    fi
+
+    generate_slug "$input_text" >&"$OUTPUT_FD"
 }
 
 main "$@"
